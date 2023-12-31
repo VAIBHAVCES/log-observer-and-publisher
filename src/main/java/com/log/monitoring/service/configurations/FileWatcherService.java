@@ -6,11 +6,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.*;
-import java.util.concurrent.Future;
 
 @Component
 @Slf4j
@@ -18,7 +19,11 @@ public class FileWatcherService {
 
     private long lastPosition = 0;
     private static long DATA_TRANSFER_LIMIT = 500;
-    private Path filePathToBeMonitored;
+
+    private static long LINES_TO_READ = 10;
+
+    private static Path filePathToBeMonitored;
+
 
     SimpMessagingTemplate simpMessagingTemplate;
     FileWatcherService(SimpMessagingTemplate simpMessagingTemplate){
@@ -35,8 +40,6 @@ public class FileWatcherService {
         setUpInitialPointers();
         monitorAndPublishFileChanges();
         log.info("Let's see code comes heere or not");
-
-
 
 
     }
@@ -65,6 +68,37 @@ public class FileWatcherService {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public static Log fetchLast10LinesOfCode(){
+        Log logStmt = null;
+        long lineNumber = 0L;
+
+        StringBuilder sb = new StringBuilder();
+        try(RandomAccessFile randomAccessFile = new RandomAccessFile(filePathToBeMonitored.toString(), "r");)  {
+
+            long fileSize = randomAccessFile.length();
+            long ptr = fileSize-1;
+            long linesRead = LINES_TO_READ;
+
+            while(linesRead>0 && ptr>0 ){
+                randomAccessFile.seek(ptr);
+                char readChar = (char)randomAccessFile.readByte();
+                if(readChar=='\n'){
+                    String st =  randomAccessFile.readLine();
+                    sb.append('\n');
+                    sb.append(st);
+                    linesRead--;
+                }
+                ptr--;
+            }
+        }catch (FileNotFoundException e){
+            e.printStackTrace();
+            log.info("File Not found check the path properly");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return new Log(sb.toString());
     }
 
     public void monitorAndPublishFileChanges(){
